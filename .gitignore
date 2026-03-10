@@ -8,6 +8,8 @@
 # UV lock file
 uv.lock
 
+GR00T-WholeBodyControl_uv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

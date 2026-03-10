@@ -97,9 +97,9 @@ def get_groot_locomanip_env_fn(
     show_gui: bool = False,
 ):
     def env_fn():
-        from gr00t_wbc.control.envs.robocasa.sync_env import SyncEnv  # noqa: F401
-        from gr00t_wbc.control.main.teleop.configs.configs import BaseConfig
-        from gr00t_wbc.control.utils.n1_utils import WholeBodyControlWrapper
+        from decoupled_wbc.control.envs.robocasa.sync_env import SyncEnv  # noqa: F401
+        from decoupled_wbc.control.main.teleop.configs.configs import BaseConfig
+        from decoupled_wbc.control.utils.n1_utils import WholeBodyControlWrapper
         import robocasa  # noqa: F401
 
         gym_env = gym.make(
