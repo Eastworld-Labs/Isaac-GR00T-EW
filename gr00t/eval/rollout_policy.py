@@ -94,6 +94,7 @@ def get_robocasa_env_fn(
 
 def get_groot_locomanip_env_fn(
     env_name: str,
+    show_gui: bool = False,
 ):
     def env_fn():
         from gr00t_wbc.control.envs.robocasa.sync_env import SyncEnv  # noqa: F401
@@ -103,7 +104,7 @@ def get_groot_locomanip_env_fn(
 
         gym_env = gym.make(
             env_name,
-            onscreen=False,
+            onscreen=show_gui,
             offscreen=True,
             enable_waist=True,
             randomize_cameras=False,
@@ -157,7 +158,9 @@ def get_behavior_env_fn(
     return env_fn
 
 
-def get_gym_env(env_name: str, env_idx: int, total_n_envs: int):
+def get_gym_env(
+    env_name: str, env_idx: int, total_n_envs: int, show_gui: bool = False
+):
     """Create Ray environment factory function without wrappers."""
 
     env_embodiment = get_embodiment_tag_from_env_name(env_name)
@@ -169,7 +172,7 @@ def get_gym_env(env_name: str, env_idx: int, total_n_envs: int):
         env_fn = get_robocasa_env_fn(env_name)
 
     elif env_embodiment in (EmbodimentTag.UNITREE_G1,):
-        env_fn = get_groot_locomanip_env_fn(env_name)
+        env_fn = get_groot_locomanip_env_fn(env_name, show_gui=show_gui)
 
     elif env_embodiment in (EmbodimentTag.OXE_GOOGLE, EmbodimentTag.OXE_WIDOWX):
         env_fn = get_simpler_env_fn(env_name)
@@ -186,7 +189,11 @@ def get_gym_env(env_name: str, env_idx: int, total_n_envs: int):
 
 
 def create_eval_env(
-    env_name: str, env_idx: int, total_n_envs: int, wrapper_configs: WrapperConfigs
+    env_name: str,
+    env_idx: int,
+    total_n_envs: int,
+    wrapper_configs: WrapperConfigs,
+    show_gui: bool = False,
 ) -> gym.Env:
     """Create a single evaluation environment with wrappers.
 
@@ -194,11 +201,12 @@ def create_eval_env(
         env_name: Name of the gymnasium environment to use
         idx: Environment index (used to determine video recording)
         wrapper_configs: Configuration for environment wrappers
+        show_gui: Whether to show on-screen GUI (G1 locomanip only).
     Returns:
         Wrapped gymnasium environment
     """
 
-    env = get_gym_env(env_name, env_idx, total_n_envs)
+    env = get_gym_env(env_name, env_idx, total_n_envs, show_gui=show_gui)
     if wrapper_configs.video.video_dir is not None:
         from gr00t.eval.sim.wrapper.video_recording_wrapper import (
             VideoRecorder,
@@ -239,6 +247,7 @@ def run_rollout_gymnasium_policy(
     wrapper_configs: WrapperConfigs,
     n_episodes: int = 10,
     n_envs: int = 1,
+    show_gui: bool = False,
 ) -> Any:
     """Run policy rollouts in parallel environments.
 
@@ -248,7 +257,7 @@ def run_rollout_gymnasium_policy(
         n_episodes: Number of episodes to run
         n_envs: Number of parallel environments
         wrapper_configs: Configuration for environment wrappers
-        ray_env: Whether to use ray gym env to create each env.
+        show_gui: Whether to show on-screen GUI (G1 locomanip only).
     Returns:
         Collection results from running the episodes
     """
@@ -263,6 +272,7 @@ def run_rollout_gymnasium_policy(
             env_name=env_name,
             total_n_envs=n_envs,
             wrapper_configs=wrapper_configs,
+            show_gui=show_gui,
         )
         for idx in range(n_envs)
     ]
@@ -392,17 +402,21 @@ def create_gr00t_sim_policy(
 ) -> BasePolicy:
     from gr00t.policy.gr00t_policy import Gr00tPolicy, Gr00tSimPolicyWrapper
 
-    if policy_client_host and policy_client_port:
-        from gr00t.policy.server_client import PolicyClient
-
-        policy = PolicyClient(host=policy_client_host, port=policy_client_port)
-    else:
+    if model_path:
         policy = Gr00tSimPolicyWrapper(
             Gr00tPolicy(
                 embodiment_tag=embodiment_tag,
                 model_path=model_path,
                 device=0,
             )
+        )
+    elif policy_client_host and policy_client_port is not None:
+        from gr00t.policy.server_client import PolicyClient
+
+        policy = PolicyClient(host=policy_client_host, port=policy_client_port)
+    else:
+        raise ValueError(
+            "Provide either model_path or (policy_client_host and policy_client_port)."
         )
     return policy
 
@@ -412,10 +426,11 @@ def run_gr00t_sim_policy(
     n_episodes: int,
     max_episode_steps: int,
     model_path: str = "",
-    policy_client_host: str = "",
-    policy_client_port: int | None = None,
+    policy_client_host: str = "localhost",
+    policy_client_port: int | None = 5555,
     n_envs: int = 8,
     n_action_steps: int = 8,
+    show_gui: bool = False,
 ):
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
@@ -450,6 +465,7 @@ def run_gr00t_sim_policy(
         wrapper_configs=wrapper_configs,
         n_episodes=n_episodes,
         n_envs=n_envs,
+        show_gui=show_gui,
     )
     print("Video saved to: ", wrapper_configs.video.video_dir)
     return results
@@ -464,8 +480,18 @@ if __name__ == "__main__":
         type=str,
         default="",
     )
-    parser.add_argument("--policy_client_host", type=str, default="")
-    parser.add_argument("--policy_client_port", type=int, default=None)
+    parser.add_argument(
+        "--policy_client_host",
+        type=str,
+        default="localhost",
+        help="Policy server host (default: localhost when using policy client).",
+    )
+    parser.add_argument(
+        "--policy_client_port",
+        type=int,
+        default=5555,
+        help="Policy server port (default: 5555 when using policy client).",
+    )
     parser.add_argument(
         "--env_name",
         type=str,
@@ -473,17 +499,20 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n_envs", type=int, default=8)
     parser.add_argument("--n_action_steps", type=int, default=8)
+    parser.add_argument(
+        "--show_gui",
+        action="store_true",
+        help="Show on-screen GUI for G1 locomanip environments.",
+    )
 
     args = parser.parse_args()
 
-    # validate policy configuration
-    assert (args.model_path and not (args.policy_client_host or args.policy_client_port)) or (
-        not args.model_path and args.policy_client_host and args.policy_client_port is not None
+    # validate policy configuration: use model_path if set, else use policy client (default localhost:5555)
+    assert args.model_path or (
+        args.policy_client_host and args.policy_client_port is not None
     ), (
-        "Invalid policy configuration: You must provide EITHER model_path OR (policy_client_host & policy_client_port), not both.\n"
-        "If all 3 arguments are provided, explicitly choose one:\n"
-        '  - To use policy client: set --policy_client_host and --policy_client_port, and set --model_path ""\n'
-        '  - To use model path: set --model_path, and set --policy_client_host "" (and leave --policy_client_port unset)'
+        "Invalid policy configuration: You must provide EITHER model_path OR (policy_client_host & policy_client_port).\n"
+        "When not providing model_path, policy client defaults to localhost:5555."
     )
 
     results = run_gr00t_sim_policy(
@@ -495,6 +524,7 @@ if __name__ == "__main__":
         policy_client_port=args.policy_client_port,
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
+        show_gui=args.show_gui,
     )
     print("results: ", results)
     print("success rate: ", np.mean(results[1]))
