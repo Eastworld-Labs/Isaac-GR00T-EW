@@ -44,6 +44,7 @@ dev = [
     "ruff",
     "ipython",
 ]
+gpu = []  # GPU deps (torch, flash-attn) are in main deps; extra allows uv run --extra=gpu
 tensorrt = [
     "onnx>=1.20.0",
     "tensorrt>=10.14.1.48.post1",

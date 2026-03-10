@@ -23,6 +23,7 @@ if ! command -v git-lfs >/dev/null 2>&1; then
     exit 1
 fi
 git -C "$GR00T_WHOLEBODYCONTROL_REPO" lfs pull
+# Use gr00t_wbc paths (submodule root pyproject.toml installs package "gr00t_wbc")
 rm -rf "$GR00T_WHOLEBODYCONTROL_REPO/gr00t_wbc/dexmg/gr00trobosuite"
 git clone https://github.com/xieleo5/robosuite.git "$GR00T_WHOLEBODYCONTROL_REPO/gr00t_wbc/dexmg/gr00trobosuite" -b leo/support_g1_locomanip
 GIT_LFS_SKIP_SMUDGE=1 uv pip install -e "$GR00T_WHOLEBODYCONTROL_REPO" --config-settings editable_mode=compat
@@ -40,6 +41,6 @@ os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 import gymnasium as gym, robocasa, robosuite
 import gr00t_wbc.control.envs.robocasa.sync_env
 print("Imports OK:", robosuite.__version__)
-env = gym.make("gr00tlocomanip_g1_sim/LMBottlePnP_G1_gear_wbc", enable_render=True)
+env = gym.make("gr00tlocomanip_g1_sim/LMPnPAppleToPlateDC_G1_gear_wbc", enable_render=True)
 print("Env OK:", type(env))
 PY
